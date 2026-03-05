@@ -5,8 +5,6 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: paskaroot
       MYSQL_DATABASE: calc_data
-    ports:
-      - "3307:3306"
     volumes:
       - db_data:/var/lib/mysql
 
