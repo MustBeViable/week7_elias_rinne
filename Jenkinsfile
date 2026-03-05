@@ -6,20 +6,36 @@ pipeline {
     disableConcurrentBuilds()
   }
 
-  environment {
-    DB_NAME  = 'calc_data'
-    DB_USER  = 'app_user'
-    DB_TABLE = 'calc_results'
+environment {
+  PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-    DB_SERVICE  = 'db'
-    APP_SERVICE = 'app'
-  }
+  DB_NAME  = 'calc_data'
+  DB_USER  = 'app_user'
+  DB_TABLE = 'calc_results'
+  DB_SERVICE  = 'db'
+  APP_SERVICE = 'app'
+}
 
   stages {
 
     stage('Checkout') {
       steps {
         checkout scm
+      }
+    }
+
+    stage('Tool check') {
+      steps {
+        sh '''
+          set -e
+          whoami
+          echo "PATH=$PATH"
+          which mvn
+          mvn -v
+          which docker
+          docker version
+          docker compose version
+        '''
       }
     }
 
