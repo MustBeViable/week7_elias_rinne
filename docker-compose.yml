@@ -5,21 +5,30 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: paskaroot
       MYSQL_DATABASE: calc_data
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD: STRONG_PASSWORD
     volumes:
       - db_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uapp_user -pSTRONG_PASSWORD --silent"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
 
   app:
     platform: linux/arm64
     build: .
     image: eliasrinne/sum-product_fx:latest
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       DB_HOST: db
       DB_PORT: "3306"
       DB_NAME: calc_data
-      DB_USER: root
-      DB_PASSWORD: paskaroot
+      DB_USER: app_user
+      DB_PASSWORD: STRONG_PASSWORD
       DISPLAY: host.docker.internal:0
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
