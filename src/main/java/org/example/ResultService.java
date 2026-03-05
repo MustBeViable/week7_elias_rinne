@@ -11,6 +11,7 @@ public class ResultService {
     static {
         try {
             Class.forName("org.mariadb.jdbc.Driver");
+            initSchema();
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
         }
@@ -18,13 +19,17 @@ public class ResultService {
 
     private static String getDatabaseHost() {
         String host = System.getenv("DB_HOST");
-        if (host == null || host.isEmpty()) host = "db"; // docker-compose service name
+        if (host == null || host.isEmpty()) {
+            host = "db"; // docker-compose service name
+        }
         return host;
     }
 
     private static String getDatabasePort() {
         String port = System.getenv("DB_PORT");
-        if (port == null || port.isEmpty()) port = "3306";
+        if (port == null || port.isEmpty()) {
+            port = "3306";
+        }
         return port;
     }
 
@@ -33,20 +38,28 @@ public class ResultService {
                 "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
     }
 
-    public static void saveResult(double n1,
-                                  double n2,
-                                  double sum,
-                                  double product,
-                                  double subtraction,
-                                  Double division) {
+    /**
+     * Creates database and table automatically when the application starts.
+     * This is required so Jenkins pipeline can verify DB + table without UI interaction.
+     */
+    public static void initSchema() {
 
-        String dbUrl = getDatabaseUrl();
+        String baseUrl = "jdbc:mariadb://" + getDatabaseHost() + ":" + getDatabasePort() +
+                "/?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
 
-        try (Connection conn = DriverManager.getConnection(dbUrl, DB_USER, DB_PASSWORD);
+        try (Connection conn = DriverManager.getConnection(baseUrl, DB_USER, DB_PASSWORD);
              Statement stmt = conn.createStatement()) {
 
-            // Create table if it doesn't exist (lisätty subtraction + division)
-            String createTable = """
+            stmt.executeUpdate("CREATE DATABASE IF NOT EXISTS " + DB_NAME);
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        try (Connection conn = DriverManager.getConnection(getDatabaseUrl(), DB_USER, DB_PASSWORD);
+             Statement stmt = conn.createStatement()) {
+
+            stmt.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS calc_results (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     number1 DOUBLE NOT NULL,
@@ -57,14 +70,29 @@ public class ResultService {
                     division_result DOUBLE NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-                """;
-            stmt.executeUpdate(createTable);
+            """);
+
+            System.out.println("Database and table verified/created successfully.");
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void saveResult(double n1,
+                                  double n2,
+                                  double sum,
+                                  double product,
+                                  double subtraction,
+                                  Double division) {
+
+        try (Connection conn = DriverManager.getConnection(getDatabaseUrl(), DB_USER, DB_PASSWORD)) {
 
             String insert = """
                 INSERT INTO calc_results
-                  (number1, number2, sum_result, product_result, subtraction_result, division_result)
+                (number1, number2, sum_result, product_result, subtraction_result, division_result)
                 VALUES (?, ?, ?, ?, ?, ?)
-                """;
+            """;
 
             try (PreparedStatement ps = conn.prepareStatement(insert)) {
                 ps.setDouble(1, n1);
@@ -82,14 +110,10 @@ public class ResultService {
                 ps.executeUpdate();
             }
 
-            System.out.println("✅ Result saved: " + n1 + ", " + n2 +
-                    " → Sum=" + sum +
-                    ", Product=" + product +
-                    ", Subtraction=" + subtraction +
-                    ", Division=" + (division == null ? "NULL" : division));
+            System.out.println("Result saved to database.");
 
         } catch (SQLException e) {
-            System.err.println("❌ Failed to save result to DB: " + dbUrl);
+            System.err.println("Failed to save result.");
             e.printStackTrace();
         }
     }
