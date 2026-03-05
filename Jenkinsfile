@@ -3,7 +3,6 @@ pipeline {
 
   options {
     timestamps()
-    ansiColor('xterm')
     disableConcurrentBuilds()
   }
 
@@ -33,26 +32,10 @@ pipeline {
       }
     }
 
-    stage('Docker: build image') {
-      steps {
-        sh '''
-          set -e
-          # Jos projektissa on Dockerfile, rakennetaan se.
-          # (Jos ei ole, tämä stage ei kaada buildia.)
-          if [ -f Dockerfile ]; then
-            docker build -t week7_calculator_fx_db:${BUILD_NUMBER} .
-          else
-            echo "No Dockerfile found in repo root -> skipping docker build stage."
-          fi
-        '''
-      }
-    }
-
     stage('Compose: up (db + app)') {
       steps {
         sh '''
           set -e
-          # Varmistetaan että compose löytyy ja stack nousee
           docker compose version
           docker compose down -v || true
           docker compose up --build -d
@@ -61,14 +44,12 @@ pipeline {
       }
     }
 
-    stage('Verify: DB + table created') {
+    stage('Verify: DB + table exists') {
       steps {
         sh '''
           set -e
 
-          # Haetaan DB-salasana docker composesta ympäristömuuttujista:
-          # Yleisimmät nimet: MARIADB_PASSWORD, MYSQL_PASSWORD, MARIADB_ROOT_PASSWORD, MYSQL_ROOT_PASSWORD
-          # Jos mikään ei osu, käyttäjä voi laittaa DB_PASSWORD credentialina ja vaihtaa tähän.
+          # Yritetään löytää salasana db-containerin envistä.
           DB_PASS=$(docker compose exec -T ${DB_SERVICE} /bin/sh -lc 'echo "${MARIADB_PASSWORD:-${MYSQL_PASSWORD:-${MARIADB_ROOT_PASSWORD:-${MYSQL_ROOT_PASSWORD:-}}}"' | tr -d '\r')
 
           if [ -z "$DB_PASS" ]; then
@@ -78,7 +59,6 @@ pipeline {
           fi
 
           echo "Waiting DB to accept connections..."
-          # Odotetaan että MariaDB on valmis
           for i in $(seq 1 30); do
             if docker compose exec -T ${DB_SERVICE} mariadb -u${DB_USER} -p${DB_PASS} -e "SELECT 1" >/dev/null 2>&1; then
               echo "DB is up."
@@ -91,11 +71,6 @@ pipeline {
               exit 1
             fi
           done
-
-          # Tässä vaiheessa taulu syntyy vasta kun app on ehtinyt ajaa saveResult() kerran.
-          # Jos sun app luo taulun startissa tai heti laskennan jälkeen, tämä riittää.
-          # Varmistetaan että app-container on käynnissä:
-          docker compose ps
 
           echo "Checking database + table..."
           docker compose exec -T ${DB_SERVICE} mariadb -u${DB_USER} -p${DB_PASS} -e "SHOW DATABASES LIKE '${DB_NAME}';"
