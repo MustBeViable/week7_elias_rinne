@@ -1,7 +1,6 @@
 services:
   db:
     image: mariadb:11
-    container_name: calculator-db-er
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: paskaroot
@@ -15,7 +14,6 @@ services:
     platform: linux/arm64
     build: .
     image: eliasrinne/sum-product_fx:latest
-    container_name: calculator-app-er
     depends_on:
       - db
     environment:
